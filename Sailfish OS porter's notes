@@ -1,0 +1,803 @@
+Sailfish OS porter's notes
+
+NOTE. Sailfish OS is a GNU/Linux system
+
+Ради чего, всё это. Sailfish OS - это проект GNU/Linux системы, запускаемой на существующей "экосистеме" Android-устройств. Это Linux на ARM, пусть и с закрытыми графическими драйверами и драйверами устройств.
+
+Главный сервер проекта Sailfish OS - https://git.merproject.org.
+
+NOTE - заметки по каждому разделу руководства Sailfish OS Hardware Adaptation Development Kit (HADK).
+Руководство доступно для скачивания на этой странице: https://sailfishos.org/develop/hadk/ 
+Заметки делались по версии 2.2.0.2. Уже доступна более свежая версия.
+Заметки относятся к моему планшету Zenpad 8 (Z380KL), модели P024.
+Для данного планшета существует версия LineageOS 14.1, которая у меня запускается и нормально работает.
+
+APPENDIX - дополнительная информация собранная в процессе выполнения руководства HADK.
+
+NOTE. Процесс адаптации замедлился и не закончился, надо изучать скрипты запуска.
+
+NOTE. Sailfish OS building station. Компьютер для сборки системы
+
+Очень желательна чистая установка Ubuntu 18.04 LTS в минимальной конфигурации, быстрый процессор и быстрый накопитель от 240ГБ. Безлимитный интернет - очень много исходников.
+
+
+NOTE 4.2. Установка Platform SDK
+
+sfossdk - Sailfish OS Software Development Kit
+Инструкция по установке Platform SDK: https://sailfishos.org/wiki/Platform_SDK_Installation
+
+Вход в PlatformSDK, осуществляется пользователем из собственной домашней папки. 
+Скрипт /srv/mer/sdks/sfossdk/mer-sdk-chroot организует в открытом окне терминала отдельное окружение, с отдельной корневой файловой системой.
+При входе запускается оболочка bash, с собственным профилем .mersdk.profile.
+Это отдельное окружение, по сути является ОС Sailfish OS (cat /etc/os-release), для x86.
+Пакетным менеджером в этом окружении (platformSDK,Mer,sfos) выступает zypper.
+sudo zypper up
+
+macibuki@station$ /srv/mer/sdks/sfossdk/mer-sdk-chroot
+
+После входа будут доступны переменные окружения, которые мы сами настроили при установке Platform SDK (Mer SDK)
+
+MERSDK=/srv/mer/sdks/sfossdk
+PLATFORM_SDK_ROOT=/srv/mer
+ANDROID_ROOT=/home/macibuki/hadk
+DEVICE=P024
+VENDOR=asus
+
+
+NOTE 4.3.2. Entering Ubuntu Chroot
+
+Вход в окружение Ubuntu из Platform SDK
+PlatformSDK macibuki@station:~$ ubu-chroot -r $PLATFORM_SDK_ROOT/sdks/ubuntu
+Env setup for P024
+HABUILD_SDK [P024] macibuki@station:~$
+
+Для сборки из исходных кодов Androida Sfossdk использует chroot окружение Ubuntu 14.04 LTS Trusty Tuhr.
+Также не очень понятна актуальность.  Т.е. мы берём какбы Ubuntu 14.04 LTS, собираем на ней исходники скачанные с git-репозитория mer hybris.
+Первоначально, ANDROID_ROOT не существует и он создаётся пользователем (это папка исходников, где будет лежать Android source)
+
+NOTE. 5. BUILDING THE ANDROID HAL
+В репозитории https://github.com/mer-hybris/android/tree/hybris-14.1 был просмотрен файл default.xml и найдены
+вхождения репозиториев проекта hybris. Значит, не избежать скачивать очередные 30 Гб.
+
+NOTE 5.1. Checking out CyanogenMod Source - выписывание исходных кодов
+
+Я буду выписывать коды Lineage OS 14.1, наследника CyanogenMod.
+
+APPENDIX. Конфигурация системы контроля версий git
+Если ещё не сделано.
+HABUILD_SDK [P024] macibuki@station:~$ git config --global user.name "myname"
+HABUILD_SDK [P024] macibuki@station:~$ git config --global user.email "myemail@domen"
+
+Для соответствия руководству HADK, надо зарегистрироваться будет в github.com, создать ключи ssh.
+
+APPENDIX. REPO TOOL
+
+после этого, надо скачать утилиту repo, т.к. она недоступна в окружении ubuntu
+mkdir ~/bin
+PATH=~/bin:$PATH
+
+
+
+https://source.android.com/setup/develop/repo
+
+Download the Repo tool and ensure that it is executable:
+
+curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+chmod a+x ~/bin/repo
+
+Потом, надо импортировать ключ:
+gpg --import
+ Copy and paste the key below, then enter EOF (Ctrl-D) to end the input and process the keys.
+
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+Version: GnuPG v1.4.2.2 (GNU/Linux)
+
+mQGiBEnnWD4RBACt9/h4v9xnnGDou13y3dvOx6/t43LPPIxeJ8eX9WB+8LLuROSV
+lFhpHawsVAcFlmi7f7jdSRF+OvtZL9ShPKdLfwBJMNkU66/TZmPewS4m782ndtw7
+8tR1cXb197Ob8kOfQB3A9yk2XZ4ei4ZC3i6wVdqHLRxABdncwu5hOF9KXwCgkxMD
+u4PVgChaAJzTYJ1EG+UYBIUEAJmfearb0qRAN7dEoff0FeXsEaUA6U90sEoVks0Z
+wNj96SA8BL+a1OoEUUfpMhiHyLuQSftxisJxTh+2QclzDviDyaTrkANjdYY7p2cq
+/HMdOY7LJlHaqtXmZxXjjtw5Uc2QG8UY8aziU3IE9nTjSwCXeJnuyvoizl9/I1S5
+jU5SA/9WwIps4SC84ielIXiGWEqq6i6/sk4I9q1YemZF2XVVKnmI1F4iCMtNKsR4
+MGSa1gA8s4iQbsKNWPgp7M3a51JCVCu6l/8zTpA+uUGapw4tWCp4o0dpIvDPBEa9
+b/aF/ygcR8mh5hgUfpF9IpXdknOsbKCvM9lSSfRciETykZc4wrRCVGhlIEFuZHJv
+aWQgT3BlbiBTb3VyY2UgUHJvamVjdCA8aW5pdGlhbC1jb250cmlidXRpb25AYW5k
+cm9pZC5jb20+iGAEExECACAFAknnWD4CGwMGCwkIBwMCBBUCCAMEFgIDAQIeAQIX
+gAAKCRDorT+BmrEOeNr+AJ42Xy6tEW7r3KzrJxnRX8mij9z8tgCdFfQYiHpYngkI
+2t09Ed+9Bm4gmEO5Ag0ESedYRBAIAKVW1JcMBWvV/0Bo9WiByJ9WJ5swMN36/vAl
+QN4mWRhfzDOk/Rosdb0csAO/l8Kz0gKQPOfObtyYjvI8JMC3rmi+LIvSUT9806Up
+hisyEmmHv6U8gUb/xHLIanXGxwhYzjgeuAXVCsv+EvoPIHbY4L/KvP5x+oCJIDbk
+C2b1TvVk9PryzmE4BPIQL/NtgR1oLWm/uWR9zRUFtBnE411aMAN3qnAHBBMZzKMX
+LWBGWE0znfRrnczI5p49i2YZJAjyX1P2WzmScK49CV82dzLo71MnrF6fj+Udtb5+
+OgTg7Cow+8PRaTkJEW5Y2JIZpnRUq0CYxAmHYX79EMKHDSThf/8AAwUIAJPWsB/M
+pK+KMs/s3r6nJrnYLTfdZhtmQXimpoDMJg1zxmL8UfNUKiQZ6esoAWtDgpqt7Y7s
+KZ8laHRARonte394hidZzM5nb6hQvpPjt2OlPRsyqVxw4c/KsjADtAuKW9/d8phb
+N8bTyOJo856qg4oOEzKG9eeF7oaZTYBy33BTL0408sEBxiMior6b8LrZrAhkqDjA
+vUXRwm/fFKgpsOysxC6xi553CxBUCH2omNV6Ka1LNMwzSp9ILz8jEGqmUtkBszwo
+G1S8fXgE0Lq3cdDM/GJ4QXP/p6LiwNF99faDMTV3+2SAOGvytOX6KjKVzKOSsfJQ
+hN0DlsIw8hqJc0WISQQYEQIACQUCSedYRAIbDAAKCRDorT+BmrEOeCUOAJ9qmR0l
+EXzeoxcdoafxqf6gZlJZlACgkWF7wi2YLW3Oa+jv2QSTlrx4KLM=
+=Wi5D
+-----END PGP PUBLIC KEY BLOCK-----
+
+
+HABUILD_SDK [P024] macibuki@station:~/hadk1$ repo init -u git://github.com/mer-hybris/android.git -b hybris-14.1
+
+завершается вот такой:
+gpg:                using DSA key 16530D5E920F5C65
+gpg: Can't check signature: public key not found
+
+Пофиксили с помощью опции --no-repo-verify
+HABUILD_SDK [P024] macibuki@station:~/hadk1$ repo init -u git://github.com/mer-hybris/android.git -b hybris-14.1 --no-repo-verify
+
+либо
+
+HABUILD_SDK [P024] macibuki@station:~/hadk1$ git config --global gpg.program gpg2
+что не сработало
+
+При установке новых пакетов, как-то nano, mc, внутри ubuntu-14, надо обновить подпись репозиториев от
+ubuntu.
+Для обновления подписи внутри Ubuntu 14 надо импортировать ключ с ключевого сервера
+Вот только где этот сервер. А вот он: keyserver.ubuntu.com
+
+HABUILD_SDK [P024] macibuki@station:~/hadk1$ sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys
+
+после этого:
+HABUILD_SDK [P024] macibuki@station:~/hadk1$ sudo apt-get update
+HABUILD_SDK [P024] macibuki@station:~/hadk1$ sudo apt-get upgrade
+
+и можно доустанавливать какие-либо инструменты.
+
+
+NOTE 5.2. Device repos - репозитории для моего устройства
+
+
+После настройка файла локального манифеста,
+
+
+HABUILD_SDK [P024] macibuki@station:~/hadk1$ repo sync --force-sync
+HABUILD_SDK [P024] macibuki@station:~/hadk1$ repo sync --fetch-submodules
+
+
+
+NOTES 5.3 Configure Mountpoint Information
+
+FIXING MOUNTPOUNTS INFO
+Устройство (планшет) должно быть загружено в обычном режиме, включён режим для разработчиков и включен суперпользователь,
+т.к. в процессе сборки может произойти подключение к устройству (или это мне привидилось).
+
+В другом терминале:
+$ adb devices
+SerialNumber device
+$ adb root
+$ adb shell
+
+Посмотрим разделы (важная информация):
+
+P024:/ # ls -l /dev/block/bootdevice/by-name/                                  
+total 0
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 ADF -> /dev/block/mmcblk0p34
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 APD -> /dev/block/mmcblk0p33
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 DDR -> /dev/block/mmcblk0p2
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 aboot -> /dev/block/mmcblk0p29
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 abootbak -> /dev/block/mmcblk0p30
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 asus_nvm -> /dev/block/mmcblk0p8
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 boot -> /dev/block/mmcblk0p31
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 cache -> /dev/block/mmcblk0p28
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 config -> /dev/block/mmcblk0p18
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 frp_pst -> /dev/block/mmcblk0p10
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 fsc -> /dev/block/mmcblk0p12
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 fsg -> /dev/block/mmcblk0p3
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 fsg1 -> /dev/block/mmcblk0p4
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 fsg2 -> /dev/block/mmcblk0p5
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 fsg3 -> /dev/block/mmcblk0p6
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 fsg4 -> /dev/block/mmcblk0p7
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 hyp -> /dev/block/mmcblk0p26
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 hypbak -> /dev/block/mmcblk0p27
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 keystore -> /dev/block/mmcblk0p17
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 misc -> /dev/block/mmcblk0p16
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 modem -> /dev/block/mmcblk0p1
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 modemst1 -> /dev/block/mmcblk0p14
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 modemst2 -> /dev/block/mmcblk0p15
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 oem -> /dev/block/mmcblk0p19
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 persist -> /dev/block/mmcblk0p9
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 recovery -> /dev/block/mmcblk0p32
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 rpm -> /dev/block/mmcblk0p22
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 rpmbak -> /dev/block/mmcblk0p23
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 sbl1 -> /dev/block/mmcblk0p20
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 sbl1bak -> /dev/block/mmcblk0p21
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 sec -> /dev/block/mmcblk0p11
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 ssd -> /dev/block/mmcblk0p13
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 system -> /dev/block/mmcblk0p35
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 tz -> /dev/block/mmcblk0p24
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 tzbak -> /dev/block/mmcblk0p25
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 userdata -> /dev/block/mmcblk0p36
+
+Итак, надо пофиксить файл ANDROID_ROOT$ hybris/hybris-boot/fixup-mountpoints
+HABUILD_SDK [P024] macibuki@station:~/hadk$ cat hybris/hybris-boot/fixup-mountpoints
+
+Создаём свою секцию в hybris/hybris-boot/fixup-mountpoints, по аналогии:
+
+"P024")
+        sed -i \
+            -e 's block/bootdevice/by-name/ADF mmcblk0p34 ' \
+            -e 's block/bootdevice/by-name/APD mmcblk0p33 ' \
+            -e 's block/bootdevice/by-name/DDR mmcblk0p2 ' \
+            -e 's block/bootdevice/by-name/aboot mmcblk0p29 ' \
+            -e 's block/bootdevice/by-name/abootbak mmcblk0p30 ' \
+            -e 's block/bootdevice/by-name/asus_nvm mmcblk0p8 ' \
+            -e 's block/bootdevice/by-name/boot mmcblk0p31 ' \
+            -e 's block/bootdevice/by-name/cache mmcblk0p28 ' \
+            -e 's block/bootdevice/by-name/config mmcblk0p18 ' \
+            -e 's block/bootdevice/by-name/frp_pst mmcblk0p10 ' \
+            -e 's block/bootdevice/by-name/fsc mmcblk0p12 ' \
+            -e 's block/bootdevice/by-name/fsg mmcblk0p3 ' \
+            -e 's block/bootdevice/by-name/fsg1 mmcblk0p4 ' \
+            -e 's block/bootdevice/by-name/fsg2 mmcblk0p5 ' \
+            -e 's block/bootdevice/by-name/fsg3 mmcblk0p6 ' \
+            -e 's block/bootdevice/by-name/fsg4 mmcblk0p7 ' \
+            -e 's block/bootdevice/by-name/hyp mmcblk0p26 ' \
+            -e 's block/bootdevice/by-name/hypbak mmcblk0p27 ' \
+            -e 's block/bootdevice/by-name/keystore mmcblk0p17 ' \
+            -e 's block/bootdevice/by-name/misc mmcblk0p16 ' \
+            -e 's block/bootdevice/by-name/modem mmcblk0p1 ' \
+            -e 's block/bootdevice/by-name/modemst1 mmcblk0p14 ' \
+            -e 's block/bootdevice/by-name/modemst2 mmcblk0p15 ' \
+            -e 's block/bootdevice/by-name/oem mmcblk0p19 ' \
+            -e 's block/bootdevice/by-name/persist mmcblk0p9 ' \
+            -e 's block/bootdevice/by-name/recovery mmcblk0p32 ' \
+            -e 's block/bootdevice/by-name/rpm mmcblk0p22 ' \
+            -e 's block/bootdevice/by-name/rpmbak mmcblk0p23 ' \
+            -e 's block/bootdevice/by-name/sbl1 mmcblk0p20 ' \
+            -e 's block/bootdevice/by-name/sbl1bak mmcblk0p21 ' \
+            -e 's block/bootdevice/by-name/sec mmcblk0p11 ' \
+            -e 's block/bootdevice/by-name/ssd mmcblk0p13 ' \
+            -e 's block/bootdevice/by-name/system mmcblk0p35 ' \
+            -e 's block/bootdevice/by-name/tz mmcblk0p24 ' \
+            -e 's block/bootdevice/by-name/tzbak mmcblk0p25 ' \
+            -e 's block/bootdevice/by-name/userdata mmcblk0p36 ' \
+            "$@"
+        ;;
+
+А что насчёт fstab?
+
+
+NOTE. 5.4 Building Relevant Bits of CyanogenMod - LineageOS
+
+Ошибка при первой сборке
+build/core/base_rules.mk:183: *** vendor/asus/msm8916-common/P024: MODULE.TARGET.APPS.qcrilmsgtunnel already defined by vendor/asus/P024.
+
+Удалил репозиторий msm8916-common из файла P024.xml в localrepositories. Был добавлен пока разбирался, что к чему.
+
+
+Ошибка при сборке
+The boot animation could not be generated as
+ImageMagick is not installed in your system.
+
+Установил imagemagick
+HABUILD_SDK [P024] macibuki@station:~/hadk$ sudo apt-get install imagemagick
+
+Какая-то встречается ошибка:
+drivers/input/sensors/bmc156/Kconfig:11:error: recursive dependency detected!
+
+
+HABUILD_SDK [P024] macibuki@station:~/hadk$ source build/envsetup.sh
+HABUILD_SDK [P024] macibuki@station:~/hadk$ export USE_CCACHE=1
+HABUILD_SDK [P024] macibuki@station:~/hadk$ breakfast $DEVICE
+HABUILD_SDK [P024] macibuki@station:~/hadk$ make -j1 hybris-hal
+
+Можно перед сборкой проверить конфигурацию ядра на соответствие некоторым требованиям Mer:
+
+HABUILD_SDK [P024] macibuki@station:~/hadk$
+hybris/mer-kernel-check/mer_verify_kernel_config kernel/asus/P024/arch/arm/configs/P024_defconfig
+и соответственно внести все эти правки.
+
+Начался процесс. Сборка около 20 мин.
+В результате, в папке out/target/product/$DEVICE/ появятся файлы hybris-boot.img и hybris-recovery.img
+
+Была ошибка из-за апострофа в fixedmountpoints
+
+Была ошибка с локалями, исправилась так:
+localedef ru_RU.UTF-8 -i ru_RU -fUTF-8
+
+
+Ninja - сборочная система используемая при сборке
+Run ninja. By default, it looks for a file named build.ninja in the current directory and builds all out-of-date targets
+
+hadk$
+find -name "*.ninja"
+./out/build-lineage_P024.ninja
+Только один файл и тот в каталоге out
+
+NOTE 5.4.1. Kernel config
+
+HABUILD_SDK [P024] macibuki@station:~/hadk$ cat device/asus/P024/BoardConfig.mk  | grep KERNEL
+BOARD_KERNEL_BASE := 0x80000000
+BOARD_KERNEL_CMDLINE := androidboot.hardware=qcom msm_rtb.filter=0x237 ehci-hcd.park=3 androidboot.bootdevice=7824900.sdhci lpm_levels.sleep_disabled=1 androidboot.selinux=enforcing
+BOARD_KERNEL_PAGESIZE := 2048
+BOARD_KERNEL_SEPARATED_DT := true
+BOARD_KERNEL_TAGS_OFFSET := 0x00000100
+TARGET_KERNEL_CROSS_COMPILE_PREFIX := $(PWD)/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8/bin/arm-eabi-
+TARGET_KERNEL_SOURCE := kernel/asus/P024
+TARGET_KERNEL_CONFIG := P024_defconfig
+BOARD_FLASH_BLOCK_SIZE := 131072 # (BOARD_KERNEL_PAGESIZE * 64)
+
+HABUILD_SDK [P024] macibuki@station:~/hadk$ find -name "P024_defconfig"
+./kernel/asus/P024/arch/arm/configs/P024_defconfig
+
+
+Можно перед сборкой проверить конфигурацию ядра на соответствие некоторым требованиям Mer:
+
+HABUILD_SDK [P024] macibuki@station:~/hadk$
+hybris/mer-kernel-check/mer_verify_kernel_config kernel/asus/P024/arch/arm/configs/P024_defconfig
+
+androidboot.selinux=enforcing
+
+Что насчёт отключение selinux в командной строке кернела? 
+Mer требует отключить: selinux=0
+
+NOTE 6. SETTING UP SCRATCHBOX2 TARGET
+
+В HADK руководстве не указано, что надо выполнить создние дополнительной цели
+
+PlatformSDK macibuki@station:~$ sdk-assistant create asus-P024-armv7hl http://releases.sailfishos.org/sdk/targets/Sailfish_OS-latest-Sailfish_SDK_Target-armv7hl.tar.7z
+Creating target [asus-P024-armv7hl]
+
+Проверка компиляции тестового файла
+PlatformSDK macibuki@station:~$ sb2 -t $VENDOR-$DEVICE-$PORT_ARCH gcc main.c -o testc
+
+PlatformSDK macibuki@station:~$ sb2 -t $VENDOR-$DEVICE-$PORT_ARCH ./testc
+Hello, world!
+
+NOTE 7. PACKAGING DROID HAL
+Следую инструкции, но не добавляю репозитории в github (потом добавил).
+
+HABUILD_SDK [P024] macibuki@station:~/hadk$ rpm/dhd/helpers/add_new_device.sh
+Creating the following nodes:
+sparse/
+patterns/
+patterns/jolla-hw-adaptation-P024.yaml
+patterns/jolla-configuration-P024.yaml
+
+
+* Building of droid-hal-version-P024 finished successfully 
+----------------------DONE! Now proceed on creating the rootfs------------------
+
+PlatformSDK macibuki@station:~/hadk$
+
+NOTE 8. CREATING THE SAILFISH OS ROOT FILESYSTEM  
+
+При сборке надо бы указать .zip вместо bz2 т.к. twrp не видит bz2, который получился в результате.
+Здесь у меня процесс и встал.
+RELEASE=3.0.0.8
+EXTRA_NAME=-DXZ
+PlatformSDK macibuki@station:~$ sudo mic create fs --arch=$PORT_ARCH \
+--tokenmap=ARCH:$PORT_ARCH,RELEASE:$RELEASE,EXTRA_NAME:$EXTRA_NAME \
+--record-pkgs=name,url \
+--outdir=sfe-$DEVICE-$RELEASE$EXTRA_NAME \
+--pack-to=sfe-$DEVICE-$RELEASE$EXTRA_NAME.tar.bz2 \
+$ANDROID_ROOT/Jolla-@RELEASE@-$DEVICE-@ARCH@.ks
+
+По умолчанию собирается bz2.
+Простая переупаковка не помогает.
+Указание .zip - не срабатывает, не понимает тип архива
+Указание .gz - не срабатывает, twrp не понимает тип архива
+
+
+Не работает пока. Видимо проблема выбора версии, которую прошивать.
+
+
+The toolchain consists of Linaro GCC, the GNU ld linker and GNU libc, run within a ScratchBox2 virtual machine within the Mer SDK chroot
+# enter the Mer SDK chroot
+    $ /srv/mer/sdks/sdk/mer-sdk-chroot
+    # check the installed version of the cross-armv7hl-gcc package
+    [MerSDK] $ sudo zypper info cross-armv7hl-gcc
+
+
+
+
+APPENDIX. Asus Zenpad 8 (Z380KL)
+
+Название Asus Zenpad 8 (Z380KL)
+Модель: P024
+Операционная система: Android 5.0, Android 6.0
+Последняя официальная версия: WW_Z380KL_V5.9.4_all_user_M202c10_12.0.0_170511
+Lineage OS: https://download.lineageos.org/P024
+
+Процессор: 1200 МГц, Qualcomm Snapdragon 410 MSM8916 (32/64 bit)
+Оперативная память: 1024 Мб
+Флеш-память: 16 ГБ.
+Год выпуска: 2015
+Производитель: Asustek Computer Inc.
+Емкость аккумлятора (мА·ч): 4000
+Сотовое подключение: LTE, UMTS, GSM
+Bluetooth: 4.0
+Wi-Fi: 802.11b,g,n
+Навигация: GPS/ГЛОНАСС
+Размер экрана: 8"
+Разрешение экрана (px): 800 x 1280
+Тип экрана: IPS
+Видеоускоритель: Adreno 306
+Камера задняя (Мпикс): 5
+Автофокус: Есть
+Камера передняя (Мпикс): 2
+Динамик: моно
+Выход наушников: 3.5
+Датчики: G-Sensor, Датчик освещенности, Датчик приближения, Цифровой компас
+Карты памяти: microSD, microSDHC, microSDXC
+Разъемы: USB-хост / OTG, microUSB
+Вес: 350 г.
+
+
+Какая архитектура у Asus Zenpad 8?
+ARM Cortex-A53 (ARMv8-A)
+
+The ARM Cortex-A53 is one of the first two microarchitectures implementing the ARMv8-A 64-bit instruction set
+Sailfish OS 32-битная система.
+
+
+Как и в какой момент строится файловая система целевой платформы?
+
+
+Установочная система, которая собирает rootfs - kikstart 
+https://pykickstart.readthedocs.io/en/latest/
+
+
+После смены корня на устройстве
+ERROR: ld.so: object 'libsigchain.so' from LD_PRELOAD cannot be preloaded (cannot open shared object file): ignored.
+
+В ИНСТРУКЦИИ при ручном монтировании указана неверная точка, надо задать /data/media/0/.stowaways/sffe
+Operating System Bootstrap
+
+The initramfs boots into a Mer derived OS installation by loading first the default Android /data partition and then bind mounting a root filesystem under /data/media/0/.stowaways/sffe. This behaviour is easily modified by editing the ./initramfs/init shell script.
+
+stowaways - безбилетник, "заяц"
+
+Покрайней мере заработал запуск сети в ядре загрузчика hybris-boot.img, если запустить hybris-boot.img без наличия
+rootfs на устройстве.
+
+$ sudo fastboot boot boot.img
+$ sudo fastboot boot boot.img -c bootmode=debug
+
+
+Хост получает IP-адрес от планшета.
+
+Зайти на планшет.
+$ telnet 192.168.2.15
+
+
+APPENDIX. Инструменты
+Инструменты для Sailfish OS
+
+"The Application SDK" - для разработки приложений
+
+Emulator - 
+
+The emulator is an x86 VM image containing a stripped down version of the target device software. It emulates most of the functions of the target device running Sailfish operating system, such as gestures, task switching and ambience.
+
+
+pkcon, zypper, rpm - пакетные менеджеры
+
+Scratchbox2 virtual machine
+
+Gerrit - для коллективной ревизии исходных кодов через браузер.
+
+
+Sailfish OS is a GNU/Linux system and as such relies on many of the standard GNU applications (shell tools): bash, coreutils, sed, ncurses, gzip, gawk, findutils, readline, emacs, and so on.
+The central C library is eglibc 2.15. 
+
+v
+The toolchain consists of Linaro GCC, the GNU ld linker and GNU libc, run within a ScratchBox2 virtual machine within the Mer SDK chroot
+
+
+
+By utilising libhybris within Sailfish OS, applications and libraries based on GNU Libc can access functionality provided by libraries and services based upon Bionic
+repo client workspace
+
+
+
+
+
+Образ готовится с помощью утилиты MIC (MER Image Creator)
+
+Каждый вариант устройства определяется шаблоном, который описывает содержимое начальной файловой системы и пакетов которые будут установлены на устройство.
+
+
+APPENDIX. Mountpoints from device
+
+P024:/ # mount 
+rootfs on / type rootfs (ro,seclabel,relatime)
+tmpfs on /dev type tmpfs (rw,seclabel,nosuid,relatime,size=447444k,nr_inodes=111861,mode=755)
+devpts on /dev/pts type devpts (rw,seclabel,relatime,mode=600)
+proc on /proc type proc (rw,relatime,gid=3009,hidepid=2)
+sysfs on /sys type sysfs (rw,seclabel,relatime)
+selinuxfs on /sys/fs/selinux type selinuxfs (rw,relatime)
+none on /acct type cgroup (rw,relatime,cpuacct)
+tmpfs on /mnt type tmpfs (rw,seclabel,relatime,size=447444k,nr_inodes=111861,mode=755,gid=1000)
+none on /config type configfs (rw,relatime)
+none on /dev/cpuctl type cgroup (rw,relatime,cpu)
+none on /dev/cpuset type cgroup (rw,relatime,cpuset,noprefix,release_agent=/sbin/cpuset_release_agent)
+pstore on /sys/fs/pstore type pstore (rw,seclabel,relatime)
+/dev/block/mmcblk0p35 on /system type ext4 (ro,seclabel,relatime,data=ordered)
+/dev/block/mmcblk0p36 on /data type ext4 (rw,seclabel,nosuid,nodev,noatime,noauto_da_alloc,data=ordered)
+/dev/block/mmcblk0p28 on /cache type ext4 (rw,seclabel,nosuid,nodev,noatime,noauto_da_alloc,data=ordered)
+/dev/block/mmcblk0p9 on /persist type ext4 (rw,seclabel,nosuid,nodev,noatime,noauto_da_alloc,data=ordered)
+/dev/block/mmcblk0p1 on /firmware type vfat (ro,context=u:object_r:firmware_file:s0,relatime,uid=1000,gid=1026,fmask=0337,dmask=0227,codepage=437,iocharset=iso8859-1,shortname=lower,errors=remount-ro)
+adb on /dev/usb-ffs/adb type functionfs (rw,relatime)
+tmpfs on /storage type tmpfs (rw,seclabel,relatime,size=447444k,nr_inodes=111861,mode=755,gid=1000)
+/data/media on /mnt/runtime/default/emulated type sdcardfs (rw,nosuid,nodev,noexec,noatime,fsuid=1023,fsgid=1023,gid=1015,multiuser,mask=6)
+/data/media on /storage/emulated type sdcardfs (rw,nosuid,nodev,noexec,noatime,fsuid=1023,fsgid=1023,gid=1015,multiuser,mask=6)
+/data/media on /mnt/runtime/read/emulated type sdcardfs (rw,nosuid,nodev,noexec,noatime,fsuid=1023,fsgid=1023,gid=9997,multiuser,mask=23)
+/data/media on /mnt/runtime/write/emulated type sdcardfs (rw,nosuid,nodev,noexec,noatime,fsuid=1023,fsgid=1023,gid=9997,multiuser,mask=7)
+/dev/block/vold/public:179_65 on /mnt/media_rw/1917-0C43 type vfat (rw,dirsync,nosuid,nodev,noexec,relatime,uid=1023,gid=1023,fmask=0007,dmask=0007,allow_utime=0020,codepage=437,iocharset=iso8859-1,shortname=mixed,utf8,errors=remount-ro)
+/mnt/media_rw/1917-0C43 on /mnt/runtime/default/1917-0C43 type sdcardfs (rw,nosuid,nodev,noexec,noatime,fsuid=1023,fsgid=1023,gid=1015,mask=6)
+/mnt/media_rw/1917-0C43 on /storage/1917-0C43 type sdcardfs (rw,nosuid,nodev,noexec,noatime,fsuid=1023,fsgid=1023,gid=1015,mask=6)
+/mnt/media_rw/1917-0C43 on /mnt/runtime/read/1917-0C43 type sdcardfs (rw,nosuid,nodev,noexec,noatime,fsuid=1023,fsgid=1023,gid=9997,mask=18)
+/mnt/media_rw/1917-0C43 on /mnt/runtime/write/1917-0C43 type sdcardfs (rw,nosuid,nodev,noexec,noatime,fsuid=1023,fsgid=1023,gid=9997,mask=18)
+
+
+
+touch /target/init_enter_debug2
+Останавливает процесс загрузки
+
+
+
+
+
+APPENDIX. Device Tree
+
+Главная цель Device Tree в Linux это обеспечить способ описания нераспознаваемых автоматически устройств.
+
+Что такое DTB?
+Device Tree Blob.
+
+Цитата с сайта:
+
+    На всех ARM, все исходные файлы дерева устройств (Device Tree Source — DTS) имеют следующее расположение arch/arm/boot/dts. .dts
+    файлы уровня описания платформы. .dtsi файлы включают файлы, как правило содержащие уровень SoC описания.
+    Инструмент, компилятор дерева устройств (Device Tree Compiler) компилирует из исходных файлов, бинарный файл. Исходных код расположен в scripts/dtc.
+    DTB создает компилятор DTC, и бинарный файл загружается через загрузчик, в свою очередь его анализирует ядро во время загрузки.
+    arch/arm/boot/dts/Makefile содержит список DTB которые должны быть собраны.
+
+Что у нас насчёт Device Tree Source?
+Есть папка: ~/hadk/kernel/asus/P024/arch/arm/boot/dts/qcom
+в ней много файлов для msm8916
+
+
+APPENDIX. Сборка
+
+В папке hadk, Makefile указывает на другой main.mk.
+HABUILD_SDK [P024] macibuki@station:~/hadk$ cat Makefile
+### DO NOT EDIT THIS FILE ###
+include build/core/main.mk
+### DO NOT EDIT THIS FILE ###
+HABUILD_SDK [P024] macibuki@station:~/hadk$ 
+
+
+The Android build system uses resource overlays to customize a product at build time. Resource overlays specify resource files that are applied on top of the defaults. To use resource overlays, modify the project buildfile to set PRODUCT_PACKAGE_OVERLAYS to a path relative to your top-level directory.
+
+Т.е. папки $VENDOR and $DEVICE перекрывают.
+
+
+
+NOTE. 9.3.1 Bootloops
+
+Файл device/asus/P024/BoardConfig.mk
+содержит 
+BOARD_KERNEL_CMDLINE := androidboot.hardware=qcom msm_rtb.filter=0x237 ehci-hcd.park=3 androidboot.bootdevice=7824900.sdhci lpm_levels.sleep_disabled=1 androidboot.selinux=enforcing selinux=0
+
+Описание многих параметров ядра и его модулей
+https://www.kernel.org/doc/html/v4.14/admin-guide/kernel-parameters.html
+
+
+
+device/asus/P024/system.prop
+
+
+Рекомендуют запустить такой скрипт в $ANDROID_ROOT, при сборке под LineageOS 14.1
+
+    #!/bin/bash
+     
+    files=(
+    "atrace.rc"
+    "init-debug.rc"
+    "mediadrmserver.rc"
+    "installd.rc"
+    "mediaextractor.rc"
+    "superuser.rc"
+    "bootstat.rc"
+    "mtpd.rc"
+    "uncrypt.rc"
+    "debuggerd.rc"
+    "logcatd.rc"
+    "vdc.rc"
+    "drmserver.rc"
+    "logd.rc"
+    "perfprofd.rc"
+    "dumpstate.rc"
+    "racoon.rc"
+    "gatekeeperd.rc"
+    "mediacodec.rc"
+    "rild.rc"
+    "vold.rc"
+    )
+     
+     
+    mkdir -p hybris/droid-configs/sparse/usr/libexec/droid-hybris/system/etc/init
+    for i in "${files[@]}"
+    do
+      ln -s /system/etc/init/$i hybris/droid-configs/sparse/usr/libexec/droid-hybris/system/etc/init/
+    done
+
+
+
+APPENDIX. Структура каталога HADK
+
+Jolla-@RELEASE@-P024-@ARCH@.ks - 
+
+bootable/recovery/ - содержит исходники "The Recovery Image" - образа раздела восстановления, которые при сборке
+ преобразуются в hybris-recovery.img
+
+vendor - оверлей для kernel
+device - оверлей для kernel
+kernel - папка для ядер Linux
+ kernel/asus/P024 - мое ядро для Android, для модели Asus Zenpad 8 или P024
+build - сборочная система Blueprint, сборочная система Kati, сборочная система Ninja, утилиты, вспомогательные средства?
+
+system -
+
+droid-local-repo - собранные командой build_packages.sh, по пункту. 7.2.1 HADK
+
+out - результаты сборочного процесса, образы для прошивки boot,recovery, установочный bz2-файл с rootfs Sailfish OS.
+
+
+hybris
+ droid-configs
+  hybris/droid-configs/installroot/usr/share/kickstarts/Jolla-@RELEASE@-P024-@ARCH@.ks
+ droid-configs/droid-configs-device  
+  hybris/droid-configs/droid-configs-device/droid-configs.inc - основной включаемый (.inc) сборочный файл, для .spec
+  hybris/droid-configs/droid-configs-device/patterns/common/sailfish-porter-tools.yaml - 
+  отладочный шаблон для тех кто портирует, задаёт несколько пакетов для удобства отладки.
+  hybris/droid-configs/droid-configs-device/patterns/templates/ - шаблоны, 
+  которые потом помещаются в droid-configs/patterns, скриптом add_new_device.sh
+
+  droid-configs/patterns - конкретный настраиваемые шаблоны для устройства, сгенерированные скриптом add_new_device.sh 
+   hybris/droid-configs/patterns/jolla-hw-adaptation-P024.yaml - какое железо
+   hybris/droid-configs/patterns/jolla-configuration-P024.yaml - какие программы
+  droid-configs/droid-configs-device/sparse
+   hybris/droid-configs/sparse/var/lib/environment/compositor/droid-hal-device.conf - 
+    устанавливает, что будет использоваться графический ускоритель, а также указывает устройство touchscreen
+  droid-configs/droid-configs-device/helpers
+   hybris/droid-configs/droid-configs-device/helpers/process_patterns.sh - собирает пакеты из шаблонов, см. HADK 8.5
+  droid-configs/droid-configs-device/ssu
+  droid-configs/droid-configs-device/kickstart
+   hybris/droid-configs/droid-configs-device/kickstart/pack_package-droid-updater - скрипт упаковки инсталляции.
+   Почему-то пакует в bz2, а хотелось бы в zip
+  droid-configs/tmp/ содержит списки файлов для различных подсистем, 
+   используется (include) файлом hybris/droid-configs/droid-configs-device/droid-configs.inc
+  droid-configs/rpm/ 
+   hybris/droid-configs/rpm/droid-config-P024.spec - спецификация пакета rpm (.spec) для моего устройства,
+   задаёт некоторые переменные окружения и параметры моего устройства
+   включает в себя тело файла: hybris/droid-configs/droid-configs-device/droid-configs.inc
+
+ droid-hal-version-P024 - содержит спецификацию (.spec) сборки HAL, т.е. какие модули () слоя абстракции над железом   будут собраны
+   hybris/droid-hal-version-P024/rpm/droid-hal-version-P024.spec - макросы для моего устройства здесь
+    включая hybris/droid-hal-version-P024/droid-hal-version/droid-hal-version.inc - основные макросы
+
+ hybris-boot - всё относящееся к загрузке sailfish os
+ mw - middleware - содержит libhybris и другие компоненты sailfish os, в виде rpm-спецификаций, собранных rpms.
+ mer-kernel-check - содержит полезные скрипты для проверки конфигурации настроек ядра и его спецификации
+
+
+
+APPENDIX. Target Init
+
+https://android.googlesource.com/platform/system/core/+/master/init/README.md
+/init.rc is the primary .rc file and is loaded by the init executable at the beginning of its execution.
+
+hybris/hybris-boot/init-script
+
+Содержимое начальногой файловой системы в памяти планшета, которое ядро монтирует в самом начале, пакуется в файл
+out/target/product/P024/ramdisk.img
+из этой папки:
+hybris/hybris-boot/initramfs/
+сам файл ramdisk.img ($ANDROID_ROOT/out/target/product/P024/ramdisk.img) пакуется в hybris-boot.img
+
+Устройство /dev/ram0 монтируется в качестве корня (root) файловой системы
+
+hybris-boot.img - содержит ядро (kernel) и начальную файловую систему (ramdisk), упакованные архиватором cpio
+
+
+hybris/hybris-boot/updater-script - выполняет распаковку bz2 архива
+
+hybris/hybris-boot/Makefile (одна из целей) - выполняет упаковку ядра (файл: zImage-P024 ) и начальную файловую систему (initramfs.gz-P024), с помощью mkbootimg
+Выкопировка из файла hybris/hybris-boot/Makefile
+boot.img-$(DEVICE): zImage-$(DEVICE) initramfs.gz-$(DEVICE)
+	mkbootimg --kernel ./zImage-$(DEVICE) --ramdisk ./initramfs.gz-$(DEVICE) $(MKBOOTIMG_PARAMS) --output ./boot.img-$(DEVICE)
+
+
+
+APPENDIX. ssu
+ssu repos
+ssu управляет подключенными репозиториями и доступом к ним, на устройстве, ну и в виртуальных машинах.
+
+
+PlatformSDK$ sudo ssu re
+Device release is currently: 3.0.0.8
+
+APPENDIX. ScratchBox2 Shell
+Whenever you enter a ScratchBox2 shell (via sb2)
+
+
+APPENDIX. mb2 - Mer build script
+/srv/mer/toolings/SailfishOS-latest/usr/bin/mb2
+mb2 Executes a subset of build commands in the context of an rpmbuild. 
+
+APPENDIX. Spectacle
+spectacle - преобразует yaml-файлы, в файлы спецификаций .spec для rpm.
+В Platform_SDK он установлен изначально.
+Синтаксис yaml: <http://www.yaml.org/spec/> 
+
+APPENDIX. Targets (rootfs) - цели
+
+sdk-assistant list
+SailfishOS-latest
+   SailfishOS-latest-armv7hl
+   SailfishOS-latest-i486
+   asus-P024-armv7hl
+Откуда появляется asus-P024-armv7hl?
+Пункт 6 HADK, подготовка sb2 цели. В HADK пропущена эта команда.
+sdk-assistant create asus-P024-armv7hl http://releases.sailfishos.org/sdk/targets/Sailfish_OS-latest-Sailfish_SDK_Target-armv7hl.tar.7z
+sdk-assistant create asus-P024-armv7hl http://releases.sailfishos.org/sdk/targets/Sailfish_OS-latest-Sailfish_SDK_Target-armv7hl.tar.7z
+Creating target [asus-P024-armv7hl]
+Using tarball [http://releases.sailfishos.org/sdk/targets/Sailfish_OS-latest-Sailfish_SDK_Target-armv7hl.tar.7z]
+Do you want to continue? (y/n) y
+Downloading 'Sailfish_OS-latest-Sailfish_SDK_Target-armv7hl.tar.7z'
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  153M  100  153M    0     0  2187k      0  0:01:11  0:01:11 --:--:-- 2282k
+INFO: md5sum matches - download ok
+
+Unpacking target ...
+Using 'SailfishOS-latest' tooling for this target
+Making sure the right toolchain exists in 'SailfishOS-latest' tooling
+Setting up SB2
+Using /srv/mer/toolings/SailfishOS-latest//opt/cross/bin/armv7hl-meego-linux-gnueabi-gcc to detect target architecture:
+Finished writing sb2.gcc.config
+gcc configured.
+sb2-init: Target architecture is 'armv7hl'
+sb2-init: Host architecture is 'i[3456]86'
+which: no gcc in (/home/macibuki/bin:/home/macibuki/bin:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin)
+sb2-init: no host-gcc.
+Finished writing sb2.config
+sb2-init: Creating Debian build system settings for this target:
+target_uuidgen: generating a unique id for target 'asus-P024-armv7hl'
+Target 'asus-P024-armv7hl' now setup
+
+
+APPENDIX. 
+ Jolla-@RELEASE@-P024-@ARCH@.ks
+
+
+
+Ресурсы
+
+https://git.merproject.org
+
+https://sailfishos.org/develop/hadk/
+
+https://sailfishos.org/wiki/Platform_SDK_Installation
+
+https://sailfishos.org/wiki/Platform_SDK_Target_Installation
+
+https://wiki.merproject.org/wiki/Adaptations/faq-hadk
+
+https://wiki.merproject.org/wiki/Spectacle
+
+http://www.yaml.org/spec/
+
+https://www.kernel.org/doc/html/v4.14/admin-guide/kernel-parameters.html
+
+https://sailfishos.org/wiki/SSU
+
+
