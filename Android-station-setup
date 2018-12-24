@@ -1,0 +1,339 @@
+Android Building Station - упрощённая инструкция
+
+С функциональностью разработчика приложений для Android и изготовителя пользовательских прошивок.
+
+Тестовая прошивка будет собираться для планшета Asus Zenpad 8 (Z380KL)
+
+1. купить недорогой SSD-диск, размером от 240 ГБ, - нужен для быстрого доступа к файлам.
+2. Установить LTS дистрибутив Ubuntu 18.04 в минимальной установке на купленный SSD-диск - нужно, чтобы иметь чистую систему.
+
+3. Для разработки приложений надо установить Android Studio. Самый быстрый способ - из центра приложений, либо из консоли - snap install android-studio
+
+4. Для изготовления прошивок надо подготовиться серьезнее.
+
+Есть официальная инструкция по сборке Lineage OS, для планшета Asus Zenpad 8 (Z380KL), кодовое имя P024.
+https://wiki.lineageos.org/devices/P024/build
+
+Далее, по тексту:
+# - команды выполняемые суперпользователем (root) на большом компьютере
+$ - команды выполняемые текущим пользователем в домашней папке на большом компьютере
+zenpad$ - команды выполняемые в папке репозитория исходных кодов
+
+5. Базовые инструменты поддержки сборки и компиляции программ
+Установить некоторые инструменты для работы с репозиториями 
+
+# apt-get install curl rsync 
+# apt-get install git repo 
+
+В Ubuntu 18.04 - свежая версия утилиты repo, при желании её можно установить из другого источника.
+
+Некоторые утилиты для работы с файловыми системами встречающимися на Android.
+# apt-get install squashfs-tools lzop zip
+
+
+Некоторые утилиты для работы с XML/XSLT
+
+# apt-get install libxml2 libxml2-utils xsltproc
+
+Некоторые утилиты для работы с образами.
+
+Некоторые утилиты для работы с изображениями
+# apt-get install pngcrush imagemagick
+
+Базовые средства для сборки программ
+# apt-get install build-essential bison flex ccache
+# apt-get install gcc-multilib g++-multilib
+
+
+g++-multilib - компилятор с языка С++ для различных архитектур 
+gcc-multilib - компилятор с языка С для различных архитектур
+
+ccache — это кэш компилятора, Кэш компилятора для быстрой перекомпиляции кода на C/C++
+bison - парсер граматики
+flex - fast lexical analyzer generator
+gperf - hash function generator
+
+Необходимые библиотеки для поддержки текстовых и графических экранов конфигурации
+lib32ncurses5-dev lib32readline-dev lib32z1-dev libncurses5-dev libsdl1.2-dev libssl-dev libwxgtk3.0-dev zlib1g-dev
+
+
+# apt-get install schedtool
+schedtool - the definitive interface to Linux scheduler
+
+
+Некоторые утилиты для работы с цифровыми подписями.
+gnupg - установлен, в Ubuntu 18.04
+
+# apt-get install gnupg
+
+
+
+gplaycli - консольный клиент для Google Play
+
+
+6. Установить android-sdk - метапакет для разработчика под Android
+
+# apt-get install android-sdk
+
+
+7. Что насчёт Java? 
+Она устанавливается пакетом android-sdk, но версия свежая, а нам требуется другая.
+
+root@station:~# java --version
+
+openjdk 10.0.2 2018-07-17
+OpenJDK Runtime Environment (build 10.0.2+13-Ubuntu-1ubuntu0.18.04.4)
+OpenJDK 64-Bit Server VM (build 10.0.2+13-Ubuntu-1ubuntu0.18.04.4, mixed mode)
+
+root@station:~# update-alternatives --list java
+/usr/lib/jvm/java-11-openjdk-amd64/bin/java
+
+Например для Lineage OS нужна 8-я версия openjdk.
+# apt-get install openjdk-8-jdk
+
+Надо выбрать версию в ручную? Используй update-alternatives
+#sudo update-alternatives --config java
+#sudo update-alternatives --config javac
+
+
+8. Git-config
+Базовая конфигурация git, если не планируется патчить глобальный репозиторий, можно использовать псевдонимы
+git config --global user.email "dzenpad@dzenmail.ru"
+git config --global user.name "dzenpad"
+
+9. Исходный код
+Теперь надо сделать загрузку исходных кодов Lineage OS
+zenpad - папка в домашней директории, будет содержать репозиторий Lineage OS 14.1 для планшета
+Asus Zenpad 8 (Z380KL)
+
+$ mkdir zenpad
+$ cd zenpad
+zenpad$ repo init -u https://github.com/LineageOS/android.git -b cm-14.1
+
+zenpad$ repo sync
+
+01.01 начато
+Можно идти спать, по идее, должно загрузиться.
+
+zenpad$ source ~/.profile
+
+
+10. Подготовка Device Tree & Kernel для планшета Asus Zenpad 8 (Z380KL)
+
+Скачивание Device Tree & Kernel
+
+zenpad$ source build/envsetup.sh
+zenpad$ breakfast P024
+
+
+11. Настройка CCACHE для компилятора
+
+export USE_CCACHE=1
+ccache -M 50G
+export CCACHE_COMPRESS=1
+
+12. Настройка JACK, набора инструментов для сборки
+
+export ANDROID_JACK_VM_ARGS="-Dfile.encoding=UTF-8 -XX:+TieredCompilation -Xmx4G"
+
+
+13. Сборка
+
+zenpad$ croot
+zenpad$ brunch P024
+
+Первая сборка - не проходит, т.к. непонятно что надо делать и где исправлять.
+
+99. Исправление типичных возникающих проблем
+ошибки возникли из-за отсутсвия некоторых проприетарных бинарных файлов, это удаётся исправить,
+если использовать стоковую прошивку и произвести извлечение (extract-files.sh). В прошивке должен быть включен
+режим разработчика (1), включена отладка по usb (2), разрешён суперпользователь (только для adb) (3), если не ставить root-доступ на планшет. В извлечённых файлах ищутся те файлы, которые не находятся командой (extract-files.sh)
+
+
+Столкнулся с тем, что в инструкции написано использовать утилиту ./extract-files.sh
+запускаемую из каталога устройства (вида device/asus/P024)
+
+extract-files.sh - шаблон скрипта для извлечения бинарных объектов с устройства по протоколу adb. При его запуске,
+устройство должно быть нормально загружено, подключен режим отладки по USB, разрешён суперпользователь для adb.
+
+Для извлечения бинарных объектов надо скопировать 
+~/zenpad/vendor/cm/build/templates/extract-files.sh
+~/zenpad/vendor/cm/build/templates/setup-makefiles.sh
+в папку 
+~/zenpad/device/asus/P024
+и отредактировать некоторые переменные окружения (VENDOR,DEVICE), в этих файлах.
+
+
+All devices should have a list of proprietary blobs in their device tree called proprietary-files.txt
+
+Для извлечения файлов должен быть включен режим root для adb, в меню разработчика.
+после этого надо извлекать файлы скриптом ./extract-files.sh
+
+Количество извлекаемых файлов повысилось, однако присутствуют и некоторые, несуществующие на устройстве файлы, которые скрипт пытается извлечь, основываясь на proprietary-files.txt
+
+Начал их искать. Посмотрел на устройстве, нету. Посмотрел в прошивках LineageOS -нету.
+Поискал в гугл по названию - нашёл git repository 
+https://github.com/darklord4822/proprietary_vendor_ark
+
+Всё также существует проблема извлечения файлов на стоковой прошивке, без рута. Видимо надо ставить суперпользователя.
+Включил суперпользователя "только для adb" в меню "Для разработчиков" в телефоне.
+
+
+# fastboot devices
+XXXXXXXXXXXX	fastboot
+
+$ fastboot devices
+no permissions (verify udev rules); see [http://developer.android.com/tools/device.html]	fastboot
+
+
+
+Проверка adb devices
+Для включения отладки по USB надо 7 раз нажать на строку "Номер сборки" в меня "О телефоне"
+
+
+14.12.2018 Удалось собрать тестовую прошивку для Asus Zenpad 8.
+
+
+
+APPENDIX. Asus Zenpad 8 (Z380KL)
+
+Название Asus Zenpad 8 (Z380KL)
+Модель: P024
+Операционная система: Android 5.0, Android 6.0
+Последняя официальная версия: WW_Z380KL_V5.9.4_all_user_M202c10_12.0.0_170511
+Lineage OS: https://download.lineageos.org/P024
+
+Процессор: 1200 МГц, Qualcomm Snapdragon 410 MSM8916 (32/64 bit)
+Оперативная память: 1024 Мб
+Флеш-память: 16 ГБ.
+Год выпуска: 2015
+Производитель: Asustek Computer Inc.
+Емкость аккумлятора (мА·ч): 4000
+Сотовое подключение: LTE, UMTS, GSM
+Bluetooth: 4.0
+Wi-Fi: 802.11b,g,n
+Навигация: GPS/ГЛОНАСС
+Размер экрана: 8"
+Разрешение экрана (px): 800 x 1280
+Тип экрана: IPS
+Видеоускоритель: Adreno 306
+Камера задняя (Мпикс): 5
+Автофокус: Есть
+Камера передняя (Мпикс): 2
+Динамик: моно
+Выход наушников: 3.5
+Датчики: G-Sensor, Датчик освещенности, Датчик приближения, Цифровой компас
+Карты памяти: microSD, microSDHC, microSDXC
+Разъемы: USB-хост / OTG, microUSB
+Вес: 350 г.
+
+Полные аналоги
+Неизвестно
+
+Аналоги по процессору
+Wileyfox Swift
+
+Версия Android 6.0.1
+Версия ядра Linux на последней официальной прошивке: 3.10.49-....
+
+Boot image: /dev/block/mmcblk0p31
+
+APPENDIX. Разделы
+В другом терминале:
+$ adb devices
+SerialNumber device
+$ adb root
+$ adb shell
+
+Посмотрим разделы (важная информация):
+
+P024:/ # ls -l /dev/block/bootdevice/by-name/                                  
+total 0
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 ADF -> /dev/block/mmcblk0p34
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 APD -> /dev/block/mmcblk0p33
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 DDR -> /dev/block/mmcblk0p2
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 aboot -> /dev/block/mmcblk0p29
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 abootbak -> /dev/block/mmcblk0p30
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 asus_nvm -> /dev/block/mmcblk0p8
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 boot -> /dev/block/mmcblk0p31
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 cache -> /dev/block/mmcblk0p28
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 config -> /dev/block/mmcblk0p18
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 frp_pst -> /dev/block/mmcblk0p10
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 fsc -> /dev/block/mmcblk0p12
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 fsg -> /dev/block/mmcblk0p3
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 fsg1 -> /dev/block/mmcblk0p4
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 fsg2 -> /dev/block/mmcblk0p5
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 fsg3 -> /dev/block/mmcblk0p6
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 fsg4 -> /dev/block/mmcblk0p7
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 hyp -> /dev/block/mmcblk0p26
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 hypbak -> /dev/block/mmcblk0p27
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 keystore -> /dev/block/mmcblk0p17
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 misc -> /dev/block/mmcblk0p16
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 modem -> /dev/block/mmcblk0p1
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 modemst1 -> /dev/block/mmcblk0p14
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 modemst2 -> /dev/block/mmcblk0p15
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 oem -> /dev/block/mmcblk0p19
+lrwxrwxrwx 1 root root 20 1973-02-03 06:13 persist -> /dev/block/mmcblk0p9
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 recovery -> /dev/block/mmcblk0p32
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 rpm -> /dev/block/mmcblk0p22
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 rpmbak -> /dev/block/mmcblk0p23
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 sbl1 -> /dev/block/mmcblk0p20
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 sbl1bak -> /dev/block/mmcblk0p21
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 sec -> /dev/block/mmcblk0p11
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 ssd -> /dev/block/mmcblk0p13
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 system -> /dev/block/mmcblk0p35
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 tz -> /dev/block/mmcblk0p24
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 tzbak -> /dev/block/mmcblk0p25
+lrwxrwxrwx 1 root root 21 1973-02-03 06:13 userdata -> /dev/block/mmcblk0p36
+
+
+ключевые слова для поиска: msm8916, zenpad, P024
+
+В поисках потерянных блобов
+
+Установил из резерва старую оригинальную прошивку
+Установил superSU через TWRP
+Загрузился нормально
+
+В режиме adb стал доступен рут?
+
+
+adb unauthorised
+Проблема была в правах доступа к папке .android и из-за того, что я запустил adb через sudo.
+
+
+В попытке исправления ошибки dependencies bailing out, появляющейся при первом запуске breakfast P024
+
+Add this to your .repo/local_manifests/roomservice.xml:
+
+<project name="TheMuppets/proprietary_vendor_asus" path="vendor/asus" remote="github" />
+<project name="TheMuppets/proprietary_vendor_qcom_binaries" path="vendor/qcom/binaries" remote="github" />
+
+After that, repo sync.
+
+
+Кстати, можно собирать тестовую прошивку, со включённой системой отладки по usb
+https://stackoverflow.com/questions/26213954/how-to-solve-adb-device-unauthorized-in-android-adb-host-device
+
+
+
+Ресурсы
+
+https://wiki.lineageos.org/devices/P024/build
+
+TheMuppets's git repository - содержит бинарные файлы производителей (разных), в том числе и
+asus
+https://github.com/TheMuppets
+https://github.com/TheMuppets/proprietary_vendor_asus
+
+
+http://www.aicp-rom.com/
+AICP Device Configuration for ASUS ZenPad 8.0 Z380KL
+https://github.com/Seitou-Saki/android_device_asus_P024
+
+https://github.com/wailazer/android_kernel_asus_P024.git
+
+Какие-то propriarity blob-files
+https://gitlab.incom.co/CM-Shield/proprietary_vendor_asus
+
+
